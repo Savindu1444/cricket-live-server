@@ -1,9 +1,0 @@
-{
-  "name": "cricket-live-server",
-  "version": "1.0.0",
-  "description": "Cricket live scoring server with OBS/vMix overlays",
-  "main": "server.js",
-  "scripts": { "start": "node server.js" },
-  "engines": { "node": ">=18" },
-  "license": "UNLICENSED"
-}
