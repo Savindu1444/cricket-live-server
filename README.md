@@ -1,47 +1,66 @@
 # Cricket Live Server
 
-Gives OBS Studio and vMix a **separate overlay address for every graphic**, fed live by the scoring page.
+One central server for scoring, live pages and OBS / vMix overlays.
 Needs only **Node.js 18 or newer**. No install step, no packages.
 
-## Run
-    node server.js
-(Windows: double-click `start.bat`.)
+## What's new: central database
+- **Matches are saved on the server.** Create or score a match on any device (phone, laptop, another computer) and it appears on every other device that opens the same server address. Open the address on a new computer and all matches are already there.
+- **Every match has its own overlay links.** Two matches can be on air at the same time and never share a scoreboard. Open a match, go to the **Broadcast** tab, and copy its links.
+- Teams and players are shared too.
+- If the server is unreachable, the scoring page keeps working and saves on the device; it uploads everything when the server is back.
 
-Open the scoring page at `http://localhost:4000/` (shown when the server starts) and score as usual.
-The **Broadcast** tab shows a green "Local server connected" line and the list of overlay links.
+## Run on your own computer
+    node server.js
+(Windows: double-click `start.bat`.) Open `http://localhost:4000/`.
+Matches are saved in the `data` folder next to `server.js`.
+
+## Run online for free (Render + Upstash)
+Render's free plan wipes its disk on every restart, so use a free **Upstash Redis** database to keep the matches:
+
+1. Sign up at upstash.com -> **Create Database** (Redis), pick the closest region, plan **Free**.
+2. On the database page open the **REST API** section and copy **UPSTASH_REDIS_REST_URL** and **UPSTASH_REDIS_REST_TOKEN**.
+3. On Render open your service -> **Environment** -> **Add Environment Variable**, and add:
+   - `UPSTASH_REDIS_REST_URL` = the URL
+   - `UPSTASH_REDIS_REST_TOKEN` = the token
+   - `EDIT_PASSWORD` = a password you choose (recommended, see below)
+4. Save. Render redeploys. The log should say `Database: upstash (online)`.
+
+If the Upstash settings are wrong, the server refuses to start (so nothing is overwritten) and the log says why.
+
+## Password (recommended when online)
+Set `EDIT_PASSWORD` and only people who know it can create, change or delete matches and settings. Viewers (live pages, overlays) never need it. The scoring page asks for the password once per device. Without `EDIT_PASSWORD`, anyone with the link can edit matches.
 
 ## OBS Studio
-1. Sources → **+** → **Browser**.
-2. URL: one overlay link, for example `http://localhost:4000/overlay/scoreboard`
-3. Width/Height: `1920` × `1080` (or the size you chose). Leave the custom CSS box empty. The background is transparent.
-4. Tick **Refresh browser when scene becomes active** so the entrance animation plays every time the graphic appears.
-5. Add each graphic as its own source and show/hide it, or put it in its own scene, with OBS. **You choose what is on air in OBS.**
+1. Open the match in the scoring page -> **Broadcast** tab.
+2. Sources -> **+** -> **Browser**. URL: one of that match's overlay links, for example
+   `https://your-server/overlay/<match id>/scoreboard`
+3. Width/Height: `1920` x `1080`. Leave the custom CSS box empty. The background is transparent.
+4. Tick **Refresh browser when scene becomes active**.
+5. Add each graphic as its own source and show/hide it in OBS.
 
 ## vMix
-1. Add Input → **Web Browser**. URL = one overlay link. Size 1920×1080.
-2. Add one input per graphic, then put the one you want on air to Output (or use an overlay channel).
-3. Live score values for vMix Data Sources / titles: `http://localhost:4000/api/fields.json`
+Add Input -> **Web Browser**, URL = one overlay link, size 1920x1080. One input per graphic.
+Live score values for vMix Data Sources: `/api/fields.json?m=<match id>` (values appear while that match is open in a scoring page).
 
-## One link per graphic
-    /overlay/scoreboard          /overlay/target (chase)      /overlay/partner
-    /overlay/batter              /overlay/bowler
-    /overlay/matchsum            /overlay/result              /overlay/custom
-    /overlay/batcard?inn=1..4    /overlay/bowlcard?inn=1..4   /overlay/inningsum?inn=1..4
-    /overlay/wagon?inn=1..4      /overlay/zones?inn=1..4      (wagon wheel; 8-zone % of runs)
+## One link per graphic (per match)
+    /overlay/<match id>/scoreboard          /overlay/<match id>/target (chase)      /overlay/<match id>/partner
+    /overlay/<match id>/batter              /overlay/<match id>/bowler
+    /overlay/<match id>/matchsum            /overlay/<match id>/result              /overlay/<match id>/custom
+    /overlay/<match id>/batcard?inn=1..4    /overlay/<match id>/bowlcard?inn=1..4   /overlay/<match id>/inningsum?inn=1..4
+    /overlay/<match id>/wagon?inn=1..4      /overlay/<match id>/zones?inn=1..4
 
 Options (add to any link, e.g. `?size=1280x720&c1=0b2a4a`):
-`size=1280x720` · `c1=` main colour (hex, no #) · `c2=` accent colour · `batter=Name` · `bowler=Name` · `wagon=Name` or `wagon=*` (wagon wheel / zones: one batter or everyone) · `bg=green` (chroma key background instead of transparent)
+`size=1280x720` · `c1=` main colour (hex, no #) · `c2=` accent colour · `batter=Name` · `bowler=Name` · `wagon=Name` or `wagon=*` · `bg=green` (chroma key background)
+
+Overlay links keep working when the scoring page is closed: they read the match from the server. Colours and size follow the Broadcast tab (remembered per match) unless you put them in the link.
+The old links without a match id (`/overlay/scoreboard`) still work and show whichever match was last open in a scoring page.
 
 ## Public pages (no sign-in)
-    /live            list of matches being scored
-    /live/<id>       live score page for one match (score, batters, commentary, full scorecard)
-These update automatically from the scoring page and are readable on phones. Share the address with anyone on your network.
-
-If you leave colours and size off, they follow the Broadcast tab, and every overlay updates when you change them.
-An overlay shows nothing until a match is open in the scoring page, and shows nothing for an innings that has not started.
+    /live            list of live and recent matches
+    /live/<id>       live score page for one match
 
 ## Notes
-- The overlay shows the match that is currently open in the scoring page.
-- Matches are saved in the scoring page's browser (not on the server). Keep using the same browser and address (`http://localhost:4000/`).
-- The server listens on your whole network. Use it on a trusted network, or `HOST=127.0.0.1 node server.js` for this computer only.
-- Other settings: `PORT=5000 node server.js`.
+- Two people scoring the *same* match at once is possible: both sets of balls are kept and merged. One scorer per match is still the safest.
+- Free Render sleeps after about 15 minutes without visitors; the first visit afterwards takes about a minute. Matches are safe in Upstash meanwhile.
+- Upstash free plan (checked Nov 2026): 500K commands per month, 250 MB. A T20 match uses well under a thousand commands.
+- Other settings: `PORT=5000 node server.js`, `HOST=127.0.0.1` (this computer only), `DATA_DIR=/some/folder` (where the local database file goes).

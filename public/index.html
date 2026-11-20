@@ -136,7 +136,8 @@ let NAVOPEN=false,NOTIFOPEN=false,ACCTOPEN=false,GQ='',THEME='auto',ACCT={name:'
 let DB={matches:[],rosters:{}},CUR=null,VIEW='home',CONF=null,HQ='',SETUPFX=null,TOASTMSG='';
 let EV=[],R=null,tab='score',mode='n',dlg=null,WD=null,RT=null,WWON=true,WFB={},WWMSG='';
 loadDB();loadPrefs();
-const sv=()=>{const cm=DB.matches.find(x=>x.id===CUR);if(cm)cm.updated=Date.now();try{localStorage.setItem('cs2',JSON.stringify({matches:DB.matches,cur:CUR,rosters:DB.rosters}))}catch(e){}};
+const lsave=()=>{try{localStorage.setItem('cs2',JSON.stringify({matches:DB.matches,cur:CUR,rosters:DB.rosters}))}catch(e){}};
+const sv=()=>{const cm=DB.matches.find(x=>x.id===CUR);if(cm)cm.updated=Math.max(Date.now(),(cm.updated||0)+1);lsave();syncSoon()};
 const E=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 let SEQ=EV.length;const push=o=>{const b=nsnap();if(o.t==='ball')WWMSG='';EV.push({id:++SEQ+'-'+Math.random().toString(36).slice(2,6),at:new Date().toLocaleTimeString(),by:ACCT.name,...o});sv();ui();nchk(b)};
 function loadDB(){try{const d=JSON.parse(localStorage.getItem('cs2')||'null');
@@ -223,7 +224,7 @@ function planned(v){const P={
  return`<h2 style="margin:0 0 8px">${P[0]}</h2><div class="card"><div style="display:inline-block;background:var(--ac2);color:var(--ac);border-radius:10px;padding:2px 10px;font-weight:700;font-size:13px">${P[1]?'Planned · '+P[1]:'Not available in this page'}</div><p style="margin:10px 0 4px"><b>${E(P[2])}</b></p><p class="mu" style="margin:0 0 10px">${E(P[3])}</p><div>${acts}</div></div>${roles}`}
 function pickActive(id){const m=DB.matches.find(x=>x.id===id);if(!m)return;CUR=id;EV=m.events;sv();ui()}
 function studio(){const opts=DB.matches.filter(m=>m.events.length||m.imp);
- const pick=`<div class="card"><label style="margin-top:0">Active match for graphics</label><select onchange="pickActive(this.value)">${CUR&&opts.some(m=>m.id===CUR)?'':'<option value="">— choose a match —</option>'}${opts.map(m=>{const i=mInfo(m);return`<option value="${m.id}"${m.id===CUR?' selected':''}>${E(i.names.join(' v '))} · ${E(i.st==='live'?'live':(i.res||''))}</option>`}).join('')}</select><div class="mu" style="margin-top:4px">Every overlay shows the active match.</div></div>`;
+ const pick=`<div class="card"><label style="margin-top:0">Match for graphics</label><select onchange="pickActive(this.value)">${CUR&&opts.some(m=>m.id===CUR)?'':'<option value="">— choose a match —</option>'}${opts.map(m=>{const i=mInfo(m);return`<option value="${m.id}"${m.id===CUR?' selected':''}>${E(i.names.join(' v '))} · ${E(i.st==='live'?'live':(i.res||''))}</option>`}).join('')}</select><div class="mu" style="margin-top:4px">Each match has its own overlay links. Choose a match to see its links.</div></div>`;
  return`<h2 style="margin:0 0 8px">📺 Broadcast Studio</h2>${pick}${R?bcast():`<div class="card mu">${opts.length?'Choose a match above to see its graphics.':'Start or import a match to see its graphics.'}</div>`}`}
 function goHome(){VIEW='home';SETUPFX=null;WD=null;RT=null;ui()}
 function newMatch(){SETUPFX=null;VIEW='setup';ui()}
@@ -421,13 +422,14 @@ async function aiScan(){const inp=document.getElementById('scanf'),fl=inp&&inp.f
  IMPBUSY=false;ui()}
 
 let OUTSEQ=0,OUTSID=Math.random().toString(36).slice(2,8),SRVBUSY=false,SRVNEXT=null;
-let OUTLAST='',SERVER=false,OUTCH=null,OUTMSG=null,OUTPC=null;
+let OUTLAST='',SERVER=false,OUTCH=null,OUTMSG=null,OUTPC=null,OUTSRV=false,PUBSRV=false;
 const OVL=['scoreboard','target','batter','bowler','partner','wagon','zones','batcard','bowlcard','inningsum','matchsum','result','custom'];
-function parseOut(){const p=(typeof location!=='undefined'&&location.pathname)||'',hs=(typeof location!=='undefined'&&location.hash)||'',q=new URLSearchParams((typeof location!=='undefined'&&location.search)||'');let lay='',o={};
- const m=p.match(/^\/overlay\/([a-z]+)\/?$/);
- if(m){lay=m[1];q.forEach((v,k)=>{o[k]=v})}
+function parseOut(){const p=(typeof location!=='undefined'&&location.pathname)||'',hs=(typeof location!=='undefined'&&location.hash)||'',q=new URLSearchParams((typeof location!=='undefined'&&location.search)||'');let lay='',o={},mid='';
+ const mm=p.match(/^\/overlay\/([A-Za-z0-9_-]+)\/([a-z]+)\/?$/),m=mm?null:p.match(/^\/overlay\/([a-z]+)\/?$/);
+ if(mm){mid=mm[1];lay=mm[2];q.forEach((v,k)=>{o[k]=v})}
+ else if(m){lay=m[1];q.forEach((v,k)=>{o[k]=v})}
  else if(/^#overlay-/.test(hs)){const t=hs.slice(9).split('-');lay=t.shift();t.forEach(x=>{if(/^inn[1-4]$/.test(x))o.inn=x.slice(3);if(x==='green')o.bg='green'})}
- return lay?{lay,o}:null}
+ return lay?{lay,o,mid}:null}
 function outDesc(msg,pc){const th=msg.theme||{},o=pc.o,hex=v=>/^[0-9a-fA-F]{6}$/.test(v||'')?'#'+v:null;
  return{lay:OVL.includes(pc.lay)?pc.lay:'none',size:/^\d{3,4}x\d{3,4}$/.test(o.size||'')?o.size:(th.size||'1920x1080'),c1:hex(o.c1)||th.c1||'#0b2a4a',c2:hex(o.c2)||th.c2||'#f5b700',ii:o.inn===undefined?'':(/^[1-4]$/.test(o.inn)?String(+o.inn-1):'9'),bp:o.batter||'',bw:o.bowler||'',wb:o.wagon||'',tpl:o.text||th.tpl||BC.tpl,on:true,bg:'checker'}}
 function outRender(){if(!OUTPC)return;const m=document.getElementById('m');if(!OUTMSG||!OUTPC){m.innerHTML='';return}
@@ -436,26 +438,77 @@ function outRender(){if(!OUTPC)return;const m=document.getElementById('m');if(!O
  if(d.ii!==''&&!R.inns[+d.ii]){m.innerHTML='';return}
  m.innerHTML=stage(d)}
 function initOutput(){try{const b=document.body;b.style.cssText='margin:0;overflow:hidden;background:'+(OUTMODE==='green'?'#00b140':'transparent');const m=document.getElementById('m');m.style.cssText='padding:0;max-width:none;margin:0'}catch(e){}
- try{const ch=new BroadcastChannel('cricket-out');ch.onmessage=e=>{OUTMSG=e.data;outRender()};if(ch.unref)ch.unref()}catch(e){}
- try{if(typeof window!=='undefined'&&window.addEventListener){window.addEventListener('storage',e=>{if(e.key==='cs-out'&&e.newValue){try{OUTMSG=JSON.parse(e.newValue);outRender()}catch(x){}}});window.addEventListener('resize',outRender)}}catch(e){}
- try{const l=localStorage.getItem('cs-out');if(l){OUTMSG=JSON.parse(l);outRender()}}catch(e){}
- try{if(typeof EventSource!=='undefined'){const es=new EventSource('/api/stream');let op=false;es.onopen=()=>{op=true};es.addEventListener('state',e=>{try{OUTMSG=JSON.parse(e.data);outRender()}catch(x){}});es.onerror=()=>{if(!op)es.close()}}}catch(e){}}
-function outPush(){if(OUTMODE||OUTPC||PUB)return;let msg;try{const cm=DB.matches.find(x=>x.id===CUR);msg={v:1,events:cm&&cm.imp?[]:EV,imp:cm&&cm.imp?cm.imp:null,theme:{c1:BC.c1,c2:BC.c2,size:BC.size,tpl:BC.tpl},fields:R?bf():null,live:DB.matches.filter(m=>m.events.length&&(m.id===CUR||!reduce(m.events).result)).slice(0,8).map(m=>({id:m.id,events:m.events}))}}catch(e){return}
+ const acc=x=>!OUTPC.mid||(!OUTSRV&&x&&x.mid===OUTPC.mid);
+ try{const ch=new BroadcastChannel('cricket-out');ch.onmessage=e=>{if(acc(e.data)){OUTMSG=e.data;outRender()}};if(ch.unref)ch.unref()}catch(e){}
+ try{if(typeof window!=='undefined'&&window.addEventListener){window.addEventListener('storage',e=>{if(e.key==='cs-out'&&e.newValue){try{const x=JSON.parse(e.newValue);if(acc(x)){OUTMSG=x;outRender()}}catch(x){}}});window.addEventListener('resize',outRender)}}catch(e){}
+ try{const l=localStorage.getItem('cs-out');if(l){const x=JSON.parse(l);if(acc(x)){OUTMSG=x;outRender()}}}catch(e){}
+ try{if(typeof EventSource!=='undefined'){const es=new EventSource('/api/stream'+(OUTPC.mid?'?m='+encodeURIComponent(OUTPC.mid):''));let op=false;es.onopen=()=>{op=true};es.addEventListener('state',e=>{try{if(OUTPC.mid)OUTSRV=true;OUTMSG=JSON.parse(e.data);outRender()}catch(x){}});es.onerror=()=>{if(!op)es.close()}}}catch(e){}}
+function outPush(){if(OUTMODE||OUTPC||PUB)return;let msg;try{const cm=DB.matches.find(x=>x.id===CUR);msg={v:1,mid:CUR||null,events:cm&&cm.imp?[]:EV,imp:cm&&cm.imp?cm.imp:null,theme:{c1:BC.c1,c2:BC.c2,size:BC.size,tpl:BC.tpl},fields:R?bf():null,live:DB.matches.filter(m=>m.events.length&&(m.id===CUR||!reduce(m.events).result)).slice(0,8).map(m=>({id:m.id,events:m.events}))}}catch(e){return}
  const j=JSON.stringify(msg);if(j===OUTLAST)return;OUTLAST=j;msg.seq=++OUTSEQ;msg.sid=OUTSID;const jj=JSON.stringify(msg);
  try{if(!OUTCH&&typeof BroadcastChannel!=='undefined'){OUTCH=new BroadcastChannel('cricket-out');if(OUTCH.unref)OUTCH.unref()}if(OUTCH)OUTCH.postMessage(msg)}catch(e){}
  try{localStorage.setItem('cs-out',jj)}catch(e){}
  if(SERVER)srvSend(jj)}
 // One update in flight at a time, always the newest: updates can never overtake each other on the way to the server.
 function srvSend(body){SRVNEXT=body;if(SRVBUSY)return;SRVBUSY=true;
- const go=()=>{const b=SRVNEXT;SRVNEXT=null;let p;try{p=fetch('/api/state',{method:'POST',headers:{'content-type':'application/json'},body:b})}catch(e){p=Promise.resolve()}
+ const go=()=>{const b=SRVNEXT;SRVNEXT=null;let p;try{p=fetch('/api/state',{method:'POST',headers:{'content-type':'application/json','x-edit-key':SYNCKEY},body:b})}catch(e){p=Promise.resolve()}
   Promise.resolve(p).catch(()=>{}).then(()=>{if(SRVNEXT)go();else SRVBUSY=false})};go()}
-function srvProbe(){try{if(typeof fetch==='undefined')return;fetch('/api/health').then(r=>r.ok?r.json():null).then(j=>{if(j&&j.cricket){SERVER=true;OUTLAST='';notify('Local server connected');ui()}}).catch(()=>{})}catch(e){}}
-function ovUrl(id,q){return(SERVER?location.origin:'http://YOUR-LAPTOP-IP:4000')+'/overlay/'+id+(q?'?'+q:'')}
+function srvProbe(){try{if(typeof fetch==='undefined')return;fetch('/api/health').then(r=>r.ok?r.json():null).then(j=>{if(j&&j.cricket){SERVER=true;SRVINFO=j;OUTLAST='';notify(j.central?'Connected to the central server':'Local server connected');if(j.central)syncConnect();ui()}}).catch(()=>{})}catch(e){}}
+// ===== Central database: matches live on the server and every device sees the same ones =====
+let SYNCM={},SYNCR={},SYNCDB='',SYNCT=null,SYNCBUSY=false,SYNCAGAIN=false,SYNCREADY=false,SYNCES=null,SYNCKEY='',SYNCDENIED=false,SRVINFO={},SYNCUI=null;
+try{const sy=JSON.parse(localStorage.getItem('cs-sync')||'null');if(sy){SYNCM=sy.m||{};SYNCR=sy.r||{};SYNCDB=sy.d||''}SYNCKEY=localStorage.getItem('cs-key')||''}catch(e){}
+function syncStore(){try{localStorage.setItem('cs-sync',JSON.stringify({m:SYNCM,r:SYNCR,d:SYNCDB}))}catch(e){}}
+function syncSoon(){if(!SERVER||!SYNCREADY||SYNCDENIED)return;clearTimeout(SYNCT);SYNCT=setTimeout(syncNow,200)}
+async function sreq(method,url,body){
+ const go=()=>fetch(url,{method,headers:{'content-type':'application/json','x-edit-key':SYNCKEY,'x-sid':OUTSID},body:body===undefined?undefined:JSON.stringify(body)});
+ let r=await go();
+ if(r.status===401&&!SYNCDENIED){const k=typeof prompt==='function'?prompt('This server needs the edit password to save changes:'):null;
+  if(k){SYNCKEY=k.trim();try{localStorage.setItem('cs-key',SYNCKEY)}catch(e){}r=await go()}
+  if(r.status===401){SYNCDENIED=true;toast('Wrong or missing password: changes are NOT saved to the server');ui()}}
+ return r}
+const stripRev=rm=>{const c=Object.assign({},rm);delete c.rev;return c};
+const unionEv=(a,b)=>{const s=new Set((a||[]).map(e=>e.id));return(a||[]).concat((b||[]).filter(e=>!s.has(e.id)))};
+function setMatch(l,c){Object.keys(l).forEach(k=>delete l[k]);Object.assign(l,c);if(l.id===CUR){EV=l.events||[];SEQ=Math.max(SEQ,EV.length)}}
+// Bring a match received from the server into this device.
+function mergeRemote(rm){if(!rm||!rm.id)return;const l=DB.matches.find(x=>x.id===rm.id),s=SYNCM[rm.id];
+ if(!l){const c=stripRev(rm);if(!c.events)c.events=[];DB.matches.push(c);SYNCM[rm.id]={u:c.updated||0,rev:rm.rev};return}
+ if(s&&s.u===(l.updated||0)){if(s.rev!==rm.rev){setMatch(l,stripRev(rm));SYNCM[rm.id]={u:l.updated||0,rev:rm.rev}}return}
+ // this device has changes the server has not seen yet: keep the events of both
+ const c=stripRev(rm);c.events=unionEv(rm.events,l.events);c.updated=Math.max(Date.now(),(rm.updated||0)+1);setMatch(l,c);SYNCM[rm.id]={u:rm.updated||0,rev:rm.rev}}
+function mergeRosters(ro){Object.keys(ro).forEach(t=>{const lj=DB.rosters[t]===undefined?undefined:JSON.stringify(DB.rosters[t]);if(lj===undefined||lj===SYNCR[t]){DB.rosters[t]=ro[t];SYNCR[t]=JSON.stringify(ro[t])}});
+ Object.keys(DB.rosters).forEach(t=>{if(!(t in ro)&&SYNCR[t]!==undefined&&JSON.stringify(DB.rosters[t])===SYNCR[t]){delete DB.rosters[t];delete SYNCR[t]}})}
+function remoteUI(){const a=document.activeElement;if(a&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)&&!a.readOnly){clearTimeout(SYNCUI);SYNCUI=setTimeout(remoteUI,2000);return}ui()}
+function afterRemote(){lsave();syncStore();clearTimeout(SYNCUI);SYNCUI=setTimeout(remoteUI,150)}
+async function pullAll(){let j;try{const r=await fetch('/api/matches',{cache:'no-store'});if(!r.ok)return;j=await r.json()}catch(e){return}
+ // A different (new or wiped) server database: this device's copies are the only ones, so send them all up again instead of deleting them.
+ if(j.dbid&&SYNCDB!==j.dbid){if(SYNCDB){SYNCM={};SYNCR={}}SYNCDB=j.dbid}
+ const ids=new Set();(j.matches||[]).forEach(rm=>{ids.add(rm.id);mergeRemote(rm)});
+ DB.matches=DB.matches.filter(l=>{if(ids.has(l.id)||!SYNCM[l.id])return true;delete SYNCM[l.id];return false});   // deleted on another device
+ if(CUR&&!DB.matches.some(x=>x.id===CUR)){CUR=null;EV=[];VIEW='dash'}
+ mergeRosters(j.rosters||{});
+ SYNCREADY=true;afterRemote();syncSoon()}
+function syncConnect(){if(SYNCES||typeof EventSource==='undefined')return;const es=SYNCES=new EventSource('/api/stream?sync=1');
+ es.onopen=()=>{pullAll()};
+ es.addEventListener('match',e=>{try{const d=JSON.parse(e.data);if(d.sid===OUTSID)return;mergeRemote(d.match);afterRemote()}catch(x){}});
+ es.addEventListener('matchdel',e=>{try{const d=JSON.parse(e.data);if(d.sid===OUTSID)return;const i=DB.matches.findIndex(x=>x.id===d.id);delete SYNCM[d.id];if(i>=0){DB.matches.splice(i,1);if(CUR===d.id){CUR=null;EV=[];VIEW='dash'}afterRemote()}}catch(x){}});
+ es.addEventListener('rosters',e=>{try{const d=JSON.parse(e.data);if(d.sid===OUTSID)return;mergeRosters(d.rosters||{});afterRemote()}catch(x){}})}
+async function putMatch(m,n){n=n||0;if(n>4)return false;const s=SYNCM[m.id],u=m.updated||0;let r;
+ try{r=await sreq('PUT','/api/matches/'+m.id,{match:m,base:s?s.rev:undefined,sid:OUTSID})}catch(e){return false}
+ if(r.status===409){const j=await r.json();mergeRemote(j.match);afterRemote();return putMatch(DB.matches.find(x=>x.id===m.id)||m,n+1)}
+ if(!r.ok)return false;const j=await r.json();SYNCM[m.id]={u,rev:j.rev};return true}
+async function syncNow(){if(!SERVER||!SYNCREADY||SYNCDENIED)return;if(SYNCBUSY){SYNCAGAIN=true;return}SYNCBUSY=true;let fail=false;
+ try{
+  for(const id of Object.keys(SYNCM)){if(DB.matches.some(x=>x.id===id))continue;const r=await sreq('DELETE','/api/matches/'+id);if(r.ok)delete SYNCM[id];else{fail=true;break}}
+  for(const m of DB.matches.slice()){const s=SYNCM[m.id];if(s&&s.u===(m.updated||0))continue;if(!(await putMatch(m)))fail=true}
+  const set={},del=[];Object.keys(DB.rosters).forEach(t=>{if(SYNCR[t]!==JSON.stringify(DB.rosters[t]))set[t]=DB.rosters[t]});Object.keys(SYNCR).forEach(t=>{if(!(t in DB.rosters))del.push(t)});
+  if(Object.keys(set).length||del.length){const r=await sreq('POST','/api/rosters',{set,del,sid:OUTSID});if(r.ok){Object.keys(set).forEach(t=>{SYNCR[t]=JSON.stringify(set[t])});del.forEach(t=>{delete SYNCR[t]})}else fail=true}
+ }catch(e){fail=true}
+ syncStore();SYNCBUSY=false;if(fail&&!SYNCDENIED){clearTimeout(SYNCT);SYNCT=setTimeout(syncNow,5000)}else if(SYNCAGAIN){SYNCAGAIN=false;syncSoon()}}
+function ovUrl(id,q){return(SERVER?location.origin:'http://YOUR-LAPTOP-IP:4000')+'/overlay/'+(CUR?CUR+'/':'')+id+(q?'?'+q:'')}
 function copyUrl(b){const v=b.previousElementSibling.value;try{navigator.clipboard.writeText(v).then(()=>toast('Copied'),()=>toast('Tap the link, then copy it'))}catch(e){toast('Tap the link, then copy it')}}
 function linksCard(){if(!R)return'';const n=Math.max(R.inns.length,R.cfg.nInn||2),nm=j=>R.cfg.names[j%2===0?R.cfg.first:1-R.cfg.first];
  const rows=[['scoreboard','Scoreboard'],['target','Chase / target'],['batter','Batter (current striker)'],['bowler','Bowler (current)'],['partner','Partnership'],['matchsum','Match summary / scores'],['result','Match result']].map(([id,l])=>[l,ovUrl(id)]);
  [['batcard','Batting card'],['bowlcard','Bowling card'],['inningsum','Innings summary'],['wagon','Wagon wheel'],['zones','Wagon zones (8 sections, % of runs)']].forEach(([id,l])=>{for(let i=1;i<=n;i++)rows.push([l+' — innings '+i+' ('+nm(i-1)+')',ovUrl(id,'inn='+i)])});
- return`<div class="card"><b>🔗 Separate overlay link for every graphic</b><div class="mu" style="margin:4px 0">${SERVER?'🟢 Local server connected. Add each link as its own Browser Source in OBS or its own Web Browser input in vMix, then choose in OBS/vMix which one is on air.':'⚪ Not connected to the local server. These links work once you run the local server on your laptop (download from the chat); this page then connects to it automatically.'}</div>
+ return`<div class="card"><b>🔗 Separate overlay link for every graphic</b><div class="mu" style="margin:4px 0">${SERVER?'🟢 Connected to the central server. <b>These links show only THIS match</b> — every match has its own set of links, so different matches never share a scoreboard. Add each link as its own Browser Source in OBS or Web Browser input in vMix, then choose in OBS/vMix which one is on air.'+(SRVINFO.store==='file'&&!/^(localhost|127\.|10\.|192\.168\.)/.test(location.hostname)?'<br><b>⚠ This server saves matches to its own disk, which a free host wipes on restart. Connect a free Upstash database (see README) to keep them.</b>':'')+(SYNCDENIED?'<br><b>⚠ Wrong or missing edit password: changes are NOT being saved to the server. Reload the page to enter it again.</b>':''):'⚪ Not connected to the server. Open this page from your server address (for example your Render link) and the links will work.'}</div>
  ${rows.map(([l,u])=>`<div style="margin:6px 0"><div class="mu">${E(l)}</div><div class="row"><input readonly value="${E(u)}" onclick="this.select()" style="font-size:12px"><button style="flex:0 0 auto" onclick="copyUrl(this)">Copy</button></div></div>`).join('')}
  <div class="mu" style="margin-top:6px">Options you can add to any link: <code>size=1280x720</code> <code>c1=0b2a4a</code> <code>c2=f5b700</code> <code>batter=Name</code> <code>bowler=Name</code> <code>bg=green</code> (chroma-key background). Colours and sizes otherwise follow the Broadcast tab.</div></div>`}
 function wk(){VIEW='match';tab='score';wk0()}
@@ -470,10 +523,10 @@ function parsePub(){const p=(typeof location!=='undefined'&&location.pathname)||
  m=hs.match(/^#live(?:-([A-Za-z0-9]+))?$/);if(m)return{kind:m[1]?'score':'list',id:m[1]||''};return null}
 function pubBack(){return SERVER||(typeof location!=='undefined'&&/^\/live/.test(location.pathname))?'/':'#'}
 function pubRender(){if(!PUB)return;const m=document.getElementById('m'),msg=OUTMSG,wrap=x=>`<div style="max-width:760px;margin:0 auto;padding:12px"><div class="card" style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><b>🏏 Live cricket</b><span><a href="${pubHref('')}">Live matches</a> · <a href="${pubBack()}">Open the app</a></span></div>${x}<div class="mu" style="text-align:center;margin:10px">Updates automatically from the scoring device.</div></div>`;
- const live=(msg&&msg.live)||[];
+ const live=((msg&&msg.live)||[]).slice().sort((a,b)=>(!!reduce(a.events).result)-(!!reduce(b.events).result));
  if(PUB.kind==='list'){const cards=live.map(x=>{const r=reduce(x.events),c=r.cfg;if(!c)return'';const sc=r.inns.map((y,i)=>c.names[i%2===0?c.first:1-c.first]+' '+y.runs+'/'+y.wk+' ('+ovTxt(y.legal)+')').join('  ·  ');
   return`<div class="card"><div class="mu">${r.result?'Result':'🔴 LIVE'} · ${E(fmtTxt(c))}${c.venue?' · '+E(c.venue):''}</div><b>${E(c.names[0])} v ${E(c.names[1])}</b><div style="margin:4px 0">${E(sc)}</div>${r.result?`<div><b>${E(r.result)}</b></div>`:''}<a href="${pubHref(x.id)}"><button class="p">Live score</button></a></div>`}).join('');
-  m.innerHTML=wrap(`<h2 style="margin:6px 0">Live matches</h2>${cards||'<div class="card mu">No live matches right now.</div>'}`);return}
+  m.innerHTML=wrap(`<h2 style="margin:6px 0">Live &amp; recent matches</h2>${cards||'<div class="card mu">No live matches right now.</div>'}`);return}
  const it=live.find(x=>x.id===PUB.id)||(PUB.id?null:(live[0]||(msg&&msg.events&&msg.events.length?{events:msg.events}:null)));
  if(!it){m.innerHTML=wrap('<div class="card mu">This match is not live right now.</div>');return}
  R=reduce(it.events);m.innerHTML=wrap(pubScore(R))}
@@ -485,10 +538,10 @@ function pubScore(r){const{cfg,inns,result}=r,i=inns.length-1,s=inns[i],tn=cfg.n
  else if(!s.done&&s.strike&&s.non){const W=s.W[s.bowler];h+=`<div class="card" style="overflow-x:auto"><table><tr><th>Batter</th><th class="r">R</th><th class="r">B</th><th class="r">4s</th><th class="r">6s</th><th class="r">SR</th></tr>${[s.strike,s.non].map(n=>{const b=s.B[n];return`<tr><td>${E(n)}${n===s.strike?' *':''}</td><td class="r">${b.r}</td><td class="r">${b.b}</td><td class="r">${b.f}</td><td class="r">${b.s}</td><td class="r">${b.b?(b.r*100/b.b).toFixed(1):'-'}</td></tr>`}).join('')}</table><div class="mu" style="margin-top:6px">Partnership ${s.part.r} (${s.part.b})${W?' · '+E(s.bowler)+' '+ovTxt(W.b)+'-'+W.m+'-'+W.r+'-'+W.w:''}</div><div style="margin-top:6px">This over: ${s.over.map(t=>`<span class="tk ${t.includes('W')?'w':''}">${t||'0'}</span>`).join('')||'<span class="mu">—</span>'}</div></div>`}
  h+=`<div class="card"><b>Commentary</b>${[...s.log].reverse().slice(0,10).map(l=>`<div style="padding:4px 0;border-bottom:1px solid var(--bd)"><span class="mu">${l.ov}</span> ${E(l.b)} to ${E(l.t)}: ${E(l.txt)}</div>`).join('')||'<div class="mu">No balls yet.</div>'}</div><h3 style="margin:10px 0 6px">Full scorecard</h3>`+card(r);return h}
 function initPublic(){try{document.body.style.cssText=''}catch(e){}
- if(!PUBL){PUBL=1;try{const ch=new BroadcastChannel('cricket-out');ch.onmessage=e=>{OUTMSG=e.data;if(PUB)pubRender()};if(ch.unref)ch.unref()}catch(e){}
-  try{window.addEventListener('storage',e=>{if(e.key==='cs-out'&&e.newValue){try{OUTMSG=JSON.parse(e.newValue);if(PUB)pubRender()}catch(x){}}})}catch(e){}
-  try{if(typeof EventSource!=='undefined'){const es=new EventSource('/api/stream');let op=false;es.onopen=()=>{op=true};es.addEventListener('state',e=>{try{OUTMSG=JSON.parse(e.data);if(PUB)pubRender()}catch(x){}});es.onerror=()=>{if(!op)es.close()}}}catch(e){}}
- try{const l=localStorage.getItem('cs-out');if(l)OUTMSG=JSON.parse(l)}catch(e){}pubRender()}
+ if(!PUBL){PUBL=1;try{const ch=new BroadcastChannel('cricket-out');ch.onmessage=e=>{if(!PUBSRV){OUTMSG=e.data;if(PUB)pubRender()}};if(ch.unref)ch.unref()}catch(e){}
+  try{window.addEventListener('storage',e=>{if(!PUBSRV&&e.key==='cs-out'&&e.newValue){try{OUTMSG=JSON.parse(e.newValue);if(PUB)pubRender()}catch(x){}}})}catch(e){}
+  try{if(typeof EventSource!=='undefined'){const es=new EventSource('/api/stream?pub=1'+(PUB&&PUB.id?'&m='+encodeURIComponent(PUB.id):''));let op=false;es.onopen=()=>{op=true};es.addEventListener('state',e=>{try{PUBSRV=true;OUTMSG=JSON.parse(e.data);if(PUB)pubRender()}catch(x){}});es.onerror=()=>{if(!op)es.close()}}}catch(e){}}
+ try{if(location.protocol==='file:'){const l=localStorage.getItem('cs-out');if(l)OUTMSG=JSON.parse(l)}}catch(e){}pubRender()}
 function bootRoute(){OUTPC=parseOut();PUB=OUTPC?null:parsePub();
  if(OUTPC){OUTMODE=(OUTPC.o.bg==='green')?'green':'clear';initOutput()}
  else if(PUB){OUTMODE='';initPublic()}
